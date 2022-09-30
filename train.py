@@ -1,10 +1,8 @@
 import tensorflow as tf 
-import numpy as np 
+import numpy as np
 import argparse
 import os 
-import pandas as pd 
-import sys
-from utils import load_data, symlog, normalize, normalize_inv, loglkl_norm, loglkl_norm_inv
+from utils import load_data
 
 """
     Trains a neural network to emulate a likelihood function.
@@ -28,8 +26,8 @@ network_name = 'planck_highl_tt_lite'
 train_validation_test_split = (0.90, 0.05, 0.05)
 
 
-batch_size = 500
-epochs = 25
+batch_size = 1000
+epochs = 15
 
 learning_rate = 0.001 #0.001 is default
 
@@ -48,17 +46,17 @@ args = parser.parse_args()
 
 # ----- DATA HANDLING -----
 data_full, loglkl, data_indices, ell = load_data(args.d)
-data_full, data_mean, data_std = normalize(data_full)
-loglkl_normed, loglkl_mean, loglkl_sigma = loglkl_norm(loglkl)
-
 data_full = tf.convert_to_tensor(data_full)
+
+input_norm = [tf.cast(tf.math.reduce_mean(data_full, axis=0), tf.float32), tf.cast(tf.math.reduce_std(data_full, axis=0), tf.float32)]
+output_norm = [np.mean(loglkl), np.std(loglkl)]
 
 N_data = data_full.shape[0]
 N_train, N_val = int(np.ceil(N_data*train_validation_test_split[0])), int(np.floor(N_data*train_validation_test_split[1]))
 N_test = N_data - N_train - N_val
 print(f"\nTraining with:\nN_train = {N_train}\nN_val = {N_val}\nN_test = {N_test}\n")
 
-dataset = tf.data.Dataset.from_tensor_slices((data_full, loglkl_normed))
+dataset = tf.data.Dataset.from_tensor_slices((data_full, loglkl))
 dataset = dataset.shuffle(buffer_size=N_data)
 data_train = dataset.take(N_train).batch(batch_size)
 data_val = dataset.skip(N_train).take(N_val).batch(batch_size)
@@ -67,10 +65,10 @@ data_test = dataset.skip(N_train + N_val).take(N_test).batch(batch_size)
 # load architecture
 if architecture == 'standard':
     from architecture import standard
-    model = standard.Standard(N_data, data_indices)
+    model = standard.Standard(data_indices, input_norm, output_norm)
 elif architecture == 'simple':
     from architecture import simple
-    model = simple.Simple(N_data, data_indices)
+    model = simple.Simple(data_indices, input_norm, output_norm)
 
 model.compile(optimizer=optimizer, loss=loss_function(), metrics=['MeanAbsoluteError'])
 history = model.fit(data_train, validation_data=data_val, epochs=epochs)
@@ -79,8 +77,7 @@ test_loss = model.evaluate(data_test)
 
 print(test_loss)
 for inp, label in iter(data_test):
-    print(loglkl_norm_inv(model.call(inp), loglkl_mean, loglkl_sigma), loglkl_norm_inv(label, loglkl_mean, loglkl_sigma))
-    exit()
+    print(model.call(inp), label)
 
 # save the model 
 save_path = 'trained_networks'
@@ -89,96 +86,3 @@ if os.path.isdir(save_path):
     while os.path.isdir(f"{save_path}/{network_name}_{n}"):
         n += 1
     model.save(f"{save_path}/{network_name}_{n}")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#############################################
-# OLD CODE
-
-"""
-# OLD NORMALIZATION CODE 
-# normalize each spectrum individually
-N_spectra = data_full.shape[1]
-for i in range(N_spectra):
-    print(f"\n\n\nPreprocessing of spectrum {spectrum_types[i]}")
-    print(f"BEFORE: \n{data_full[0, i, :]}")
-    #data_full[:, i, :] = np.log(data_full[:, i, :])
-    
-    symlog_thresh = 1e-40
-    data_full[:, i, :] = symlog(data_full[:, i, :], symlog_thresh)
-
-    
-    data_full[:, i, :] = (data_full[:, i, :] - np.mean(data_full[:, i, :]))/np.std(data_full[:, i, :])
-    #print(np.mean(data_full[:, i, :]))
-    print(f"AFTER: \n{data_full[0, i, :]}")
-
-
-print(data_full.shape)
-"""
-
-
-
-# CODE FOR FLATTENED DATA
-#cls = np.swapaxes(cls, 0, 1) # shape (N_data_points, N_spectra, N_ell)
-#cls = np.reshape(cls, [cls.shape[0], cls.shape[1]*cls.shape[2]]) # shape (N_data_points, N_spectra*N_ell), ordered such that e.g. all clTT's come first
-
-# split data into training, validation and training sets 
-#N_data = data_full.shape[0]
-#N_train, N_val = int(np.ceil(N_data*train_validation_test_split[0])), int(np.floor(N_data*train_validation_test_split[1]))
-#N_test = N_data - N_train - N_val
-#print(f"\nTraining with:\nN_train = {N_train}\nN_val = {N_val}\nN_test = {N_test}\n")
-
-#data_train = tf.data.Dataset.from_tensor_slices((data_full[0:N_train, :], loglkl[0:N_train]))
-#data_val   = tf.data.Dataset.from_tensor_slices((data_full[N_train:N_train + N_val, :], loglkl[N_train:N_train + N_val]))
-#data_test  = tf.data.Dataset.from_tensor_slices((data_full[N_train + N_val:, :], loglkl[N_train + N_val:]))
-
-# shuffle data into batches
-
-#input_size = data_full.shape[1]
-
-
-# data_full has shape (N_spectra, N_data_points, N_ell)
-# change into shape (N_data_points, N_spectra, N_ell)
-#print(data_full)
-
-# CODE FOR INDIVIDUAL NORMALIZATINO OF SPECTRA
-#N_spectra = data_full.shape[1]
-#normalizers = []
-#for i in range(N_spectra):
-    #normalizer = tf.keras.layers.Normalization()
-    #normalizer.adapt(data_full[:, i, 2:])
-    #normalizer.adapt(data_full)
-    #print(data_full[0, i, 2:])
-    #print(normalizer(data_full[0, i, 2:]))
-    #normalizers.append(normalizer)
-
-
-
-
-# CODE FOR UNFLATTENED DATA
-# data_full has shape (N_spectra, N_data_points, N_ell)
-#data_full = tf.convert_to_tensor(np.array(cls)) 
-# change into shape (N_data_points, N_spectra, N_ell)
-#data_full = tf.transpose(data_full, [1, 0, 2])
-
-#data_train = tf.data.Dataset.from_tensor_slices((data_full[0:N_train, :, :], loglkl[0:N_train]))
-#data_val   = tf.data.Dataset.from_tensor_slices((data_full[N_train:N_train + N_val, :, :], loglkl[N_train:N_train + N_val]))
-#data_test  = tf.data.Dataset.from_tensor_slices((data_full[N_train + N_val:, :, :], loglkl[N_train + N_val:]))
-
-#input_size = data_full.shape[1]*data_full.shape[2]

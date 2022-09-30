@@ -1,11 +1,11 @@
 import tensorflow as tf
-import numpy as np 
 
 class Standard(tf.keras.Model):
-    def __init__(self, N_data, data_indices):
+    def __init__(self, data_indices, input_norm_params, output_norm_params):
         super(Standard, self).__init__()
-        
-        #   Standard, fully-connected network
+
+        self.mean, self.sigma = input_norm_params
+        self.loglkl_mean, self.loglkl_sigma = output_norm_params
 
         self.data_indices = data_indices
         self.num_spectra = len(data_indices.keys()) - 1
@@ -36,7 +36,8 @@ class Standard(tf.keras.Model):
 
     def call(self, x, **kwargs):
         x = self.input_layer(x)
-        
+        x = self.normalize_input(x)
+
         split_indices = [val for key, val in self.data_indices.items() if val != 0]
         split_indices.append(x.shape[1] - max(split_indices))
         spectra = tf.split(x, split_indices, axis=1)
@@ -52,6 +53,13 @@ class Standard(tf.keras.Model):
 
         for layer in self.global_layers:
             x = layer(x)
-            
-        x = self.output_layer(x)                
+
+        x = self.output_layer(x)
+        x = self.normalize_output_inverse(x)
         return x
+
+    def normalize_input(self, x):
+        return tf.divide(tf.add(x, -self.mean), self.sigma)
+
+    def normalize_output_inverse(self, x):
+        return self.loglkl_sigma*x + self.loglkl_mean
