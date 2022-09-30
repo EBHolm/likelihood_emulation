@@ -68,6 +68,9 @@ data_test = dataset.skip(N_train + N_val).take(N_test).batch(batch_size)
 if architecture == 'standard':
     from architecture import standard
     model = standard.Standard(N_data, data_indices)
+elif architecture == 'simple':
+    from architecture import simple
+    model = simple.Simple(N_data, data_indices)
 
 model.compile(optimizer=optimizer, loss=loss_function(), metrics=['MeanAbsoluteError'])
 history = model.fit(data_train, validation_data=data_val, epochs=epochs)

@@ -22,20 +22,21 @@ def load_data(folder):
                     pass
                 spectrum_type = file[file.find('.cl')+3:]
                 if data_list.shape[0] > 0:
-                    data_list = np.concatenate([data_list, data[:, 3:-2]], axis=1)
                     data_indices[spectrum_type] = data_list.shape[1]
+                    data_list = np.concatenate([data_list, data[:, 3:-2]], axis=1)
                 else:
-                    data_list = data[:, 3:-2]
                     data_indices[spectrum_type] = 0
+                    data_list = data[:, 3:-2]
         elif file.find('.nuisance') != -1:
             print(f"Reading {file}")
             nuisance_data = np.loadtxt(filename, ndmin=2)
             if data_list.shape[0] > 0:
-                data_list = np.concatenate([data_list, nuisance_data], axis=1)
                 data_indices['nuisance'] = data_list.shape[1]
+                data_list = np.concatenate([data_list, nuisance_data], axis=1)
             else:
-                data_list = nuisance_data
                 data_indices['nuisance'] = 0
+                data_list = nuisance_data
+                
     # remove eventual buggy values 
     loglkl    = np.delete(loglkl, np.where(np.isnan(data_list))[0], axis=0)
     data_list = np.delete(data_list, np.where(np.isnan(data_list))[0], axis=0)
