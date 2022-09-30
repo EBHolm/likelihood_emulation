@@ -23,13 +23,13 @@ from utils import load_data, symlog, normalize, normalize_inv, loglkl_norm, logl
 """
 
 # HYPERPARAMETERS FOR THE TRAINING PROCESS
-network_name = 'Planck_highl_TT_lite'
+network_name = 'planck_highl_tt_lite'
 
 train_validation_test_split = (0.90, 0.05, 0.05)
 
 
-batch_size = 1000
-epochs = 8
+batch_size = 500
+epochs = 25
 
 learning_rate = 0.001 #0.001 is default
 
@@ -47,12 +47,10 @@ parser.add_argument('-d', metavar='DATA', type=str, help="The folder containing 
 args = parser.parse_args()
 
 # ----- DATA HANDLING -----
-data_full, loglkl, spectrum_types, ell = load_data(args.d)
-data_full, data_mean, data_std = normalize(data_full, method=2)
+data_full, loglkl, data_indices, ell = load_data(args.d)
+data_full, data_mean, data_std = normalize(data_full)
 loglkl_normed, loglkl_mean, loglkl_sigma = loglkl_norm(loglkl)
-data_full = np.reshape(data_full, [data_full.shape[0], data_full.shape[2]])
 
-print(data_full.shape)
 data_full = tf.convert_to_tensor(data_full)
 
 N_data = data_full.shape[0]
@@ -61,21 +59,15 @@ N_test = N_data - N_train - N_val
 print(f"\nTraining with:\nN_train = {N_train}\nN_val = {N_val}\nN_test = {N_test}\n")
 
 dataset = tf.data.Dataset.from_tensor_slices((data_full, loglkl_normed))
-#dataset = tf.data.Dataset.from_tensor_slices((data_full, loglkl))
-#dataset = dataset.shuffle(buffer_size=N_data)
+dataset = dataset.shuffle(buffer_size=N_data)
 data_train = dataset.take(N_train).batch(batch_size)
 data_val = dataset.skip(N_train).take(N_val).batch(batch_size)
 data_test = dataset.skip(N_train + N_val).take(N_test).batch(batch_size)
 
-#N_spectra = data_full.shape[1]
-#spectrum_size = data_full.shape[2]
-N_spectra = 1
-spectrum_size = data_full.shape[1]
-
 # load architecture
 if architecture == 'standard':
     from architecture import standard
-    model = standard.Standard(N_spectra, spectrum_size)
+    model = standard.Standard(N_data, data_indices)
 
 model.compile(optimizer=optimizer, loss=loss_function(), metrics=['MeanAbsoluteError'])
 history = model.fit(data_train, validation_data=data_val, epochs=epochs)
@@ -83,20 +75,17 @@ history = model.fit(data_train, validation_data=data_val, epochs=epochs)
 test_loss = model.evaluate(data_test)
 
 print(test_loss)
-#for inp, label in iter(data_test):
-for inp, label in iter(data_train):
+for inp, label in iter(data_test):
     print(loglkl_norm_inv(model.call(inp), loglkl_mean, loglkl_sigma), loglkl_norm_inv(label, loglkl_mean, loglkl_sigma))
-    print(np.unique(loglkl_norm_inv(model.call(inp), loglkl_mean, loglkl_sigma)).shape)
     exit()
-    #print(model.call(inp), label)
-    a = model.call(inp)
-
-#for layer in model.layers:
-  #  print(layer.name, layer)
-    #print(layer.name, layer.weights[0])
-
 
 # save the model 
+save_path = 'trained_networks'
+if os.path.isdir(save_path):
+    n = 0
+    while os.path.isdir(f"{save_path}/{network_name}_{n}"):
+        n += 1
+    model.save(f"{save_path}/{network_name}_{n}")
 
 
 
