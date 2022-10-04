@@ -6,7 +6,11 @@ Data generation is done by running an MCMC with the MontePython using the additi
 
 This will save the Cl spectra produced for the `clik` likelihoods requested in the MontePython parameter file.
 
-Once the output folder from a run like the above is obtained, place it in the `/data/` folder of this repository. An emulator for this likelihood is then trained by running:
+Once the output folder from a run like the above is obtained, place it in the `/data/` folder of this repository. First format the data by running:
+
+`python clean_data.py -d data/outputfolder`
+
+An emulator for this likelihood is then trained by running:
 
 `python train.py -d data/outputfolder`
 
